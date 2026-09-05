@@ -1,0 +1,19 @@
+# tracker
+__pycache__/
+*.pyc
+.venv/
+tracker/calibration.json
+
+# recordings (keep the sample, ignore session captures)
+recordings/*.jsonl
+!recordings/sample.jsonl
+
+# local overrides
+wall/config/feel.local.json
+.env
+*.local
+
+# os
+Thumbs.db
+desktop.ini
+.DS_Store

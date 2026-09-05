@@ -1,0 +1,93 @@
+{
+  "_": "Every tunable that affects how the wall feels. Edit and press T on the wall to reload without restarting.",
+  "_fates": "gravity and driftX together decide how a token ends: at 0.158/0.068 roughly 59% cool and fall into the pile, 28% survive across to the right edge, ~2.5% rug. Raising gravity past 0.17 kills almost everything, which removes the point of catching one before it passes.",
+
+  "sim": { "hz": 60, "maxCatchUpSteps": 5 },
+
+  "flow": {
+    "spawnPerSecond": 3.4,
+    "spawnBandTop": 0.075,
+    "spawnBandBottom": 0.52,
+    "spawnBandBias": 1.7,
+    "driftX": 0.068,
+    "driftJitter": 0.022,
+    "curlScale": 2.3,
+    "curlStrength": 0.024,
+    "curlDrift": 0.06,
+    "buoyancy": 0.216,
+    "gravity": 0.158,
+    "drag": 0.85,
+    "maxTokens": 260,
+    "motes": 300,
+    "moteHeat": 0.34,
+    "moteGravity": 0.30
+  },
+
+  "silhouette": {
+    "cx": 0.5, "cy": 0.63, "rx": 0.115, "ry": 0.40,
+    "margin": 0.22, "push": 0.187, "tangential": 1.55
+  },
+
+  "token": {
+    "baseRadius": 0.0185,
+    "trailSteps": 4,
+    "trailSeconds": 0.085,
+    "radiusHeatGain": 0.55,
+    "coolRateMin": 0.068,
+    "coolRateMax": 0.187,
+    "pumpChance": 0.34,
+    "pumpHeat": 0.45,
+    "pumpDurationMax": 3.0,
+    "deathHeat": 0.055,
+        "rugBaseChance": 0.0013
+  },
+
+  "rug": {
+    "fragments": 46,
+    "fragmentSpeed": 0.52,
+    "fragmentGravity": 0.62,
+    "fragmentDrag": 0.55,
+    "fragmentLife": 3.4,
+    "flashRadius": 0.115,
+    "flashFraction": 0.30,
+    "shake": 0.016,
+    "shakeDecay": 4.2,
+    "shockwaveSpeed": 0.30,
+    "shockwaveLife": 0.48,
+    "shockwaveWidth": 0.028
+  },
+
+  "ash": {
+    "columns": 170,
+    "riseFromDeath": 0.0070,
+    "riseFromFragment": 0.00085,
+    "spread": 5,
+    "maxHeight": 0.30,
+    "slump": 0.45
+  },
+
+  "scar": {
+    "width": 0.022,
+    "intensityPerRug": 0.34,
+    "maxIntensity": 1.0
+  },
+
+  "bloom": {
+    "scale": 0.25,
+    "blurPx": 7,
+    "brightness": 1.32,
+    "contrast": 1.7,
+    "strength": 0.9
+  },
+
+  "atmosphere": {
+    "hazeStrength": 0.05,
+    "hazeRadius": 0.85,
+    "vignette": 0.45,
+    "grain": 0.020
+  },
+
+  "chrome": { "fontPx": 15, "dim": 0.45 },
+
+  "hold": { "seconds": 1.2, "ringRadius": 52 }
+}

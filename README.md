@@ -24,8 +24,18 @@ front of the camera.
 
 ## Status
 
-Phase 0. Docs only, no code yet. Phase 1 (the flow, keyboard controls, no gestures) is
-proposed in `docs/phases.md` and awaiting go-ahead.
+**Phase 1 built.** The flow, keyboard controls, no gestures. `tracker/` does not exist yet.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wall.ps1
+```
+
+Serves `wall/` and opens Chrome fullscreen on the first non-primary display. `-Display N`
+picks a different one (it prints what it found), `-Windowed` skips kiosk mode, `-Seed N`
+reruns a specific session. Press `?` on the wall for the key map.
+
+No install step, no build step, no dependencies. Python 3 is used only as a static file
+server.
 
 ## Safety
 

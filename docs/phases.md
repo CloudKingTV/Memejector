@@ -64,9 +64,11 @@ Nothing under `tracker/` is written in Phase 1.
 | `R` | rug a random visible token |
 | `Shift+R` | rug the hottest token |
 | `S` | toggle the silhouette zone outline |
+| `,` / `.` | nudge the silhouette left / right |
+| `;` / `'` | narrow / widen the silhouette |
 | `F` | fullscreen |
 | `T` | re-fetch `feel.json` |
-| `C` | clear ash and scars — **hold to confirm** |
+| `C` | clear ash and scars — **hold to confirm**, the only destructive action in Phase 1 |
 | `[` / `]` | previous / next seed |
 | `K` | kill switch (visible freeze state; nothing to freeze yet) |
 | `D` | debug HUD: fps, entity count, sim ms, render ms |
@@ -84,10 +86,25 @@ camera stand or handheld from where the audience camera sits. Four clips:
 4. **Three minutes compressed** — start clean, let ash and scars build, film the last ten
    seconds of it.
 
+### Numbers to expect
+
+Measured headless at 1920×1080, seed 20260905:
+
+| | at ×1 flow | at ×3 flow |
+|---|---|---|
+| live tokens | ~32 | ~85 |
+| token fate | 57% cool and fall into the pile, 31% survive across to the right edge, ~2% rug | same |
+| ash after 2 min | ~0.03 of wall height | ~0.19 |
+
+If those are wildly different on your machine, something is wrong. If they match and it
+still looks wrong, that is a `feel.json` problem, not a code problem.
+
 ### What to judge
 
-- Does the flow part around you, or do tokens land on your chest? Walk left and right; the
-  ellipse is static in Phase 1, so find out how much slack it needs.
+- Does the flow part around you, or do tokens land on your chest? Stand where you normally
+  stand, press `S` to show the ellipse, and fit it to your actual shadow with `,` `.` `;` `'`.
+  It persists, so this is a one-time calibration. Then press `S` again and check it still
+  parts correctly when you move a step either way.
 - Cut clip 1 to three seconds, mute it, and ask whether it reads as something you'd stop
   scrolling for. That is the actual bar.
 - Does anything decelerate in a way that reads as software? Snapping, linear fades,
@@ -98,6 +115,10 @@ camera stand or handheld from where the audience camera sits. Four clips:
 - Clip 4: is the wall visibly messier at the end than the start? If it isn't, the ash and
   scars are too polite.
 - Anything readable that shouldn't be, or unreadable that should be, from where you stand.
+- Press `D` and check `bloom`. That pass is the whole render cost — everything else is
+  1-2 ms. If it is above ~8 ms on your GPU, drop `bloom.scale` to 0.2 or `bloom.blurPx` to
+  5 in `feel.json` and press `T`. (It measures 25-40 ms in headless software rendering,
+  which is not representative — your projector display is running a real GPU.)
 
 ---
 

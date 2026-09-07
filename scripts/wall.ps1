@@ -6,6 +6,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\wall.ps1
   powershell -ExecutionPolicy Bypass -File scripts\wall.ps1 -Display 1
   powershell -ExecutionPolicy Bypass -File scripts\wall.ps1 -NoBrowser
+  powershell -ExecutionPolicy Bypass -File scripts\wall.ps1 -Page cursor
 
 .NOTES
   -Display is 1-based and lists what it found, so if the projector is not the
@@ -17,6 +18,8 @@ param(
   [int]$Port = 5173,
   [int]$Display = 0,
   [int]$Seed = 0,
+  [ValidateSet('wall', 'cursor')]
+  [string]$Page = 'wall',
   [switch]$NoBrowser,
   [switch]$Windowed
 )
@@ -76,8 +79,10 @@ if (-not $NoBrowser) {
   if (-not $chrome) {
     Write-Warning "Chrome not found. Open http://127.0.0.1:$Port yourself and press F."
   } else {
-    $url = "http://127.0.0.1:$Port/"
-    if ($Seed -gt 0) { $url += "?seed=$Seed" }
+    # -Page cursor opens the Phase 2 diagnostic instead of the flow.
+    $url = if ($Page -eq 'cursor') { "http://127.0.0.1:$Port/dev/cursor.html" }
+           else { "http://127.0.0.1:$Port/" }
+    if ($Seed -gt 0 -and $Page -eq 'wall') { $url += "?seed=$Seed" }
 
     # A dedicated profile keeps the wall free of extensions, sync popups and
     # whatever else is in the everyday browser. It has to survive a restart

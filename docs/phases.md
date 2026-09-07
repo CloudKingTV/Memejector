@@ -124,20 +124,139 @@ still looks wrong, that is a `feel.json` problem, not a code problem.
 
 ## Phase 2 — pinch cursor over a plain page
 
-Tracker, calibration, WebSocket, driving a dot on a blank page. No trading UI touches this.
+Tracker, calibration, WebSocket, driving a dot on a plain page. No trading UI
+touches this. The only questions are: does the dot land where you point, does it
+stay still when your hand does, does pinch fire when you mean it to, and how long
+does the whole path take.
 
-Adds `tracker/` in full, `recordings/`, `wall/input/hands.js`, the mouse shim, and a
-throwaway `wall/dev/cursor.html`.
+### Files added in Phase 2
 
-**Film:** slow horizontal sweeps, fast flicks, hand held still for ten seconds, pinch open
-and closed twenty times, arm extending and retracting, and walking out of frame and back.
+```
+tracker/
+  requirements.txt
+  tracker.json                tuning: One Euro constants, pinch thresholds
+  memejector_tracker/
+    __main__.py               CLI: run / replay / calibrate
+    schema.py                 the wire message, mirrors docs/protocol.md
+    filters.py                One Euro
+    pinch.py                  hysteresis + debounce
+    calibration.py            homography solve/apply, depth baseline, save/load
+    sources.py                camera | replay | synthetic
+    server.py                 WebSocket broadcast, records as a side effect
+    calibrate.py              the four-corner tool
+  tests/test_core.py          runs with no camera and no MediaPipe
+wall/
+  input/hands.js              WS client + mouse shim, same messages either way
+  dev/cursor.html             the Phase 2 diagnostic
+recordings/sample.jsonl       8s of synthetic hand, for replay with nothing installed
+scripts/
+  tracker.ps1
+  calibrate.ps1
+```
 
-**Judge:** the latency number on the HUD; whether the dot sits still when your hand does;
-whether pinch ever chatters; whether the dot lands where your finger points at all four
-corners and in the middle; whether it recovers cleanly when your hand leaves frame.
-Pass/fail is capture-to-paint under about 80 ms with no visible jitter at rest.
+### Install
 
----
+```powershell
+python -m pip install -r tracker\requirements.txt
+```
+
+`opencv-python` and `mediapipe` are only needed by the camera source. The
+synthetic and replay sources need nothing but `websockets`.
+
+### Bring it up in this order
+
+Do not start with the camera. Each step rules out a layer, so when something
+breaks you know which one.
+
+**1. Synthetic — no camera, no MediaPipe.** Two terminals:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tracker.ps1 -Source synthetic
+powershell -ExecutionPolicy Bypass -File scripts\wall.ps1 -Page cursor
+```
+
+Two dots trace ellipses and pinch on a cycle. If this works, the socket, the
+protocol, the page and the projector are all fine, and anything that breaks
+later is the camera or MediaPipe.
+
+**2. Replay.** Same thing from the recorded file:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tracker.ps1 -Replay recordings\sample.jsonl
+```
+
+**3. Calibrate.** Projector on, camera mounted above it, you out of the way:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\calibrate.ps1
+```
+
+A dot appears in each corner of the wall in turn; click it where you see it in
+the camera window. Then the depth baseline: hand tucked at your chest, SPACE;
+arm fully extended at the wall, SPACE. Writes `tracker/calibration.json`.
+
+**4. Camera.**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tracker.ps1 -Record
+```
+
+Start Sony Imaging Edge Webcam first, and close anything else holding the camera
+(OBS, Teams, Zoom) — the ZV-1 will only give it to one program at a time.
+`-Record` writes `recordings/<timestamp>-camera.jsonl`, which you can replay
+later to work on the wall without standing up.
+
+### What to film
+
+1. **Slow horizontal sweeps** at chest height, edge to edge, three times.
+2. **Fast flicks** — the motion a throw will be made of.
+3. **Hand held still for ten seconds**, arm out, not moving. Watch the jitter
+   number settle.
+4. **Pinch open and closed twenty times**, at a normal speed and then quickly.
+5. **Arm extending and retracting** — watch the depth ring grow and shrink.
+6. **Walking out of frame and back**, twice.
+7. **Killing the tracker terminal and restarting it** while the page stays open.
+
+### What to judge
+
+Pass/fail is a number and it is on the screen:
+
+- **Latency under ~80 ms median.** Above ~120 ms it will feel like dragging
+  something through mud. The HUD splits out the tracker's own share
+  (capture to socket), so you can tell a slow camera from a slow filter.
+- **Jitter under ~3 px with the hand still.** The readout only appears when you
+  actually hold still; a sweep is not jitter.
+- **No pinch chatter.** Twenty deliberate pinches should be twenty state changes,
+  not thirty.
+- **The dot lands on all five rings.** Point at each corner and the centre. Right
+  in the middle but wrong at the corners means the calibration collapsed to an
+  affine fit and keystone is being ignored — recalibrate and click the dot
+  centres more carefully.
+- **The hollow ring is the unfiltered position.** The gap between it and the
+  solid dot is the filter doing its job. A large constant gap while moving is
+  lag; a ring vibrating around a still dot is jitter being removed.
+- **Recovery.** Hand out of frame and back should re-acquire cleanly. Killing
+  the tracker should show `disconnected`, and restarting it should reconnect on
+  its own with no reload.
+
+If latency is high, drop the camera resolution first — it is almost always the
+biggest single cost. If jitter is high, lower `filter.min_cutoff` in
+`tracker/tracker.json`. If the dot lags a fast sweep, raise `filter.beta`. Both
+take a tracker restart, not a code change.
+
+### Numbers measured so far
+
+Transport only, synthetic source, no camera in the path:
+
+| | |
+|---|---|
+| frame rate | 60.2 fps, zero dropped frames |
+| capture to browser | 0.7 ms median, 1.1 ms p95 |
+| One Euro filter lag | 2.9 frames (48 ms) on a 1.0 unit/sec sweep |
+| One Euro jitter kept | ~9% of a still hand's frame-to-frame movement |
+
+That is the floor. The ZV-1 and MediaPipe will add the real cost, and measuring
+that is what Phase 2 is for.
 
 ## Phase 3 — one gesture end to end
 

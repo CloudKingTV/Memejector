@@ -1,0 +1,8 @@
+# The camera source only. `--source synthetic` and `--source replay` need
+# nothing but websockets, which is deliberate: the whole pipeline can be brought
+# up and verified before touching a camera driver.
+websockets>=12.0
+
+# Camera + hand tracking.
+opencv-python>=4.9
+mediapipe>=0.10.14

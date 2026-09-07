@@ -24,7 +24,8 @@ front of the camera.
 
 ## Status
 
-**Phase 1 built.** The flow, keyboard controls, no gestures. `tracker/` does not exist yet.
+**Phases 1 and 2 built.** The flow with keyboard controls, and the tracker with a
+pinch cursor. No trading UI is wired to gestures yet — that is Phase 3.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\wall.ps1
@@ -36,6 +37,25 @@ reruns a specific session. Press `?` on the wall for the key map.
 
 No install step, no build step, no dependencies. Python 3 is used only as a static file
 server.
+
+### The tracker
+
+```powershell
+python -m pip install -r tracker\requirements.txt
+
+powershell -ExecutionPolicy Bypass -File scripts\tracker.ps1 -Source synthetic
+powershell -ExecutionPolicy Bypass -File scripts\wall.ps1 -Page cursor
+```
+
+Start with `-Source synthetic`: it needs no camera and no MediaPipe, so if the dot
+moves there and not with the camera, you know which half is broken. Then
+`scripts\calibrate.ps1` once, then `scripts\tracker.ps1 -Record`.
+
+Tests that need neither a camera nor MediaPipe:
+
+```powershell
+python tracker\tests\test_core.py
+```
 
 ## Safety
 

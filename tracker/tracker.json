@@ -1,0 +1,15 @@
+{
+  "_": "Tracker tuning. Read at startup; command-line flags override.",
+
+  "filter": {
+    "_": "One Euro. min_cutoff controls jitter when the hand is still; beta controls how much the filter sharpens up when it moves. Measured at 60fps on a 0..1 signal: these give ~2.9 frames (48ms) of filter lag and keep ~9% of resting jitter. Lower min_cutoff if the dot creeps when you hold still; raise beta if it lags behind a fast sweep.",
+    "min_cutoff": 0.8,
+    "beta": 2.5
+  },
+
+  "pinch": {
+    "_": "Thumb-to-index distance divided by hand span. Closes below close_at, opens above open_at. The gap between them is the hysteresis and it is the only thing stopping a grab from being a coin flip. Never set open_at at or below close_at.",
+    "close_at": 0.32,
+    "open_at": 0.45
+  }
+}

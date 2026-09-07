@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Memejector — Phase 2 cursor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%23ff8a2b'/%3E%3C/svg%3E">
+<style>
+  html, body { margin:0; height:100%; background:#050403; overflow:hidden; cursor:none;
+               -webkit-user-select:none; user-select:none; }
+  canvas { display:block; width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import { createHandSource, createMouseShim } from '../input/hands.js';
+import { heatCss } from '../sim/heat.js';
+
+/**
+ * Phase 2 pass/fail, on one page.
+ *
+ * Deliberately not a trading UI. The only questions here are: does the dot sit
+ * where you point, does it stay still when your hand does, does pinch fire when
+ * you mean it to, and how long does the whole path take. Everything on screen
+ * serves one of those four.
+ */
+
+const params = new URLSearchParams(location.search);
+const useShim = params.get('shim') === '1';
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  W = canvas.width = Math.round(innerWidth * DPR);
+  H = canvas.height = Math.round(innerHeight * DPR);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+}
+addEventListener('resize', resize);
+resize();
+
+/* --- measurement ---------------------------------------------------------- */
+
+const HISTORY = 90;                 // ~1.5s at 60fps
+const hist = { right: [], left: [] };
+const latency = [];
+const trail = [];
+
+/** RMS spread of position, in projector pixels, while the hand is holding still. */
+function jitterPx(samples) {
+  if (samples.length < 20) return null;
+  const recent = samples.slice(-HISTORY);
+  const mx = recent.reduce((a, s) => a + s.x, 0) / recent.length;
+  const my = recent.reduce((a, s) => a + s.y, 0) / recent.length;
+  // Only meaningful when the hand is actually still; a sweep is not jitter.
+  const span = Math.max(...recent.map((s) => Math.hypot(s.x - mx, s.y - my)));
+  if (span > 0.04) return null;
+  const v = recent.reduce((a, s) => a + (s.x - mx) ** 2 + (s.y - my) ** 2, 0) / recent.length;
+  return Math.sqrt(v) * H / DPR;
+}
+
+function median(a) {
+  if (!a.length) return 0;
+  const s = [...a].sort((x, y) => x - y);
+  return s[Math.floor(s.length / 2)];
+}
+
+/* --- source --------------------------------------------------------------- */
+
+let lastFrameAt = 0;
+const onFrame = (msg, state) => {
+  lastFrameAt = performance.now();
+  latency.push(state.latency);
+  if (latency.length > 180) latency.shift();
+  for (const h of msg.hands) {
+    const arr = hist[h.id] || (hist[h.id] = []);
+    arr.push({ x: h.pos[0], y: h.pos[1], t: msg.t_capture });
+    if (arr.length > HISTORY * 2) arr.shift();
+    if (h.id === 'right') {
+      const now = performance.now();
+      trail.push({ x: h.pos[0], y: h.pos[1], closed: h.pinch.closed, t: now });
+      // Drop by age, not by count, so a trail does not survive a tracker
+      // restart and draw a phantom stroke across the gap.
+      while (trail.length && now - trail[0].t > 1200) trail.shift();
+    }
+  }
+};
+
+const source = useShim
+  ? createMouseShim({ onFrame })
+  : createHandSource({ url: `ws://${location.hostname || '127.0.0.1'}:8787`, onFrame });
+source.start();
+
+/* --- alignment targets ---------------------------------------------------- */
+
+// Point at each of these in turn. If the dot lands on them at all five, the
+// homography is good; if it is right in the middle and wrong at the corners,
+// the solve collapsed to an affine fit and keystone is being ignored.
+const TARGETS = [
+  { x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 },
+  { x: 0.50, y: 0.50 },
+  { x: 0.06, y: 0.94 }, { x: 0.94, y: 0.94 }
+];
+const hitAt = new Map();
+
+/* --- draw ----------------------------------------------------------------- */
+
+const F = (n) => Math.round(n * (H / DPR) / 1080 * DPR);
+
+function drawHand(h, primary) {
+  const x = h.pos[0] * W, y = h.pos[1] * H;
+  const rx = h.raw[0] * W, ry = h.raw[1] * H;
+  const closed = h.pinch.closed;
+
+  // Raw, unfiltered. The gap between this and the solid dot IS the filter, and
+  // seeing both is the fastest way to tell smoothing from lag.
+  ctx.strokeStyle = 'rgba(120,90,70,0.55)';
+  ctx.lineWidth = Math.max(1, F(1.5));
+  ctx.beginPath();
+  ctx.arc(rx, ry, F(9), 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Depth ring. Grows as the arm extends — this is what will size a position.
+  const depthR = F(34) + h.depth * F(80);
+  ctx.strokeStyle = heatCss(0.30 + h.depth * 0.45, 0.55);
+  ctx.lineWidth = Math.max(1, F(3));
+  ctx.beginPath();
+  ctx.arc(x, y, depthR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const r = closed ? F(13) : F(22);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3.2);
+  const heat = closed ? 0.95 : 0.55;
+  g.addColorStop(0, heatCss(heat, primary ? 1 : 0.7));
+  g.addColorStop(0.3, heatCss(heat * 0.8, 0.35));
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = heatCss(closed ? 1 : 0.7, 1);
+  ctx.beginPath();
+  ctx.arc(x, y, closed ? F(7) : F(4), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = heatCss(0.4, 0.7);
+  ctx.font = `${F(15)}px ui-monospace, Consolas, monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText(h.id, x, y + depthR + F(24));
+}
+
+function draw() {
+  const s = source.state;
+  ctx.fillStyle = '#050403';
+  ctx.fillRect(0, 0, W, H);
+
+  // Targets
+  const right = s.hands.right;
+  for (const t of TARGETS) {
+    const tx = t.x * W, ty = t.y * H;
+    let near = false;
+    for (const h of [s.hands.left, s.hands.right]) {
+      if (!h) continue;
+      if (Math.hypot(h.pos[0] - t.x, (h.pos[1] - t.y) * (H / W)) < 0.022) near = true;
+    }
+    if (near) hitAt.set(t, performance.now());
+    const ago = performance.now() - (hitAt.get(t) || -1e9);
+    const glow = Math.max(0, 1 - ago / 1200);
+    ctx.strokeStyle = near ? heatCss(0.9, 0.9) : heatCss(0.22, 0.30 + glow * 0.5);
+    ctx.lineWidth = Math.max(1, F(near ? 3 : 1.5));
+    ctx.beginPath();
+    ctx.arc(tx, ty, F(26), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(tx - F(9), ty); ctx.lineTo(tx + F(9), ty);
+    ctx.moveTo(tx, ty - F(9)); ctx.lineTo(tx, ty + F(9));
+    ctx.stroke();
+  }
+
+  // Trail. Bright where the pinch was closed, so a grab leaves a visible stroke.
+  ctx.lineCap = 'round';
+  for (let i = 1; i < trail.length; i++) {
+    const a = trail[i - 1], b = trail[i];
+    const age = 1 - i / trail.length;
+    ctx.strokeStyle = heatCss(b.closed ? 0.85 : 0.35, (1 - age) * 0.5);
+    ctx.lineWidth = Math.max(1, F(b.closed ? 6 : 2.5));
+    ctx.beginPath();
+    ctx.moveTo(a.x * W, a.y * H);
+    ctx.lineTo(b.x * W, b.y * H);
+    ctx.stroke();
+  }
+
+  if (s.hands.left) drawHand(s.hands.left, false);
+  if (right) drawHand(right, true);
+
+  drawHud(s);
+  requestAnimationFrame(draw);
+}
+
+function drawHud(s) {
+  // Kept clear of all five alignment targets. The corners belong to the rings;
+  // a readout sitting on top of one is a readout you cannot check against.
+  const left = F(34);
+  const top = Math.round(H * 0.22);
+  ctx.font = `${F(16)}px ui-monospace, Consolas, monospace`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  const stale = performance.now() - lastFrameAt > 500;
+  const live = s.connected && !stale;
+  const med = median(latency);
+  const p95 = latency.length ? [...latency].sort((a, b) => a - b)[Math.floor(latency.length * 0.95)] : 0;
+  const jr = jitterPx(hist.right || []);
+  const jl = jitterPx(hist.left || []);
+
+  const rows = [
+    [live ? `${s.source || 'connected'}` : (s.connected ? 'no frames' : 'disconnected'),
+     live ? heatCss(0.7, 0.95) : 'rgba(230,90,40,0.95)'],
+    [s.error ? s.error : '', 'rgba(230,90,40,0.9)'],
+    ['', ''],
+    [`latency   ${med.toFixed(0)} ms median   ${p95.toFixed(0)} p95`,
+     med > 120 ? 'rgba(230,90,40,0.95)' : med > 80 ? heatCss(0.72, 0.9) : heatCss(0.5, 0.85)],
+    [`  tracker  ${s.trackerCost.toFixed(0)} ms of that (capture -> socket)`, heatCss(0.28, 0.75)],
+    [`jitter    ${jr === null ? 'hold still to measure' : jr.toFixed(2) + ' px'}` +
+     (jl === null ? '' : `   left ${jl.toFixed(2)} px`),
+     jr !== null && jr > 3 ? 'rgba(230,90,40,0.95)' : heatCss(0.5, 0.85)],
+    [`capture   ${s.fps.toFixed(1)} fps    ${s.dropped} frames lost`, heatCss(0.28, 0.75)],
+    ['', ''],
+    [`pinch     R ${fmtPinch(s.hands.right)}    L ${fmtPinch(s.hands.left)}`, heatCss(0.35, 0.8)],
+    [`depth     R ${s.hands.right ? s.hands.right.depth.toFixed(2) : '--'}` +
+     `    L ${s.hands.left ? s.hands.left.depth.toFixed(2) : '--'}`, heatCss(0.28, 0.75)]
+  ];
+
+  if (s.hello) {
+    rows.push(['', '']);
+    rows.push([`${s.hello.calibrated ? 'calibrated' : 'NOT CALIBRATED — raw camera space'}` +
+      `   mirror ${s.hello.mirrored}`,
+      s.hello.calibrated ? heatCss(0.25, 0.7) : 'rgba(230,140,40,0.9)']);
+  }
+
+  ctx.fillStyle = 'rgba(8,6,5,0.72)';
+  ctx.fillRect(left - F(14), top - F(14), F(430), F(23) * rows.length + F(20));
+
+  let y = top;
+  for (const [text, color] of rows) {
+    if (text) { ctx.fillStyle = color; ctx.fillText(text, left, y); }
+    y += F(23);
+  }
+
+  ctx.fillStyle = heatCss(0.2, 0.55);
+  ctx.textAlign = 'center';
+  ctx.fillText('point at each ring · pinch to draw · ?shim=1 for mouse',
+               W / 2, H - F(46));
+
+  if (!s.connected && !useShim) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = heatCss(0.5, 0.8);
+    ctx.font = `${F(20)}px ui-monospace, Consolas, monospace`;
+    ctx.fillText('waiting for the tracker on ws://127.0.0.1:8787', W / 2, H * 0.30);
+    ctx.font = `${F(15)}px ui-monospace, Consolas, monospace`;
+    ctx.fillStyle = heatCss(0.28, 0.7);
+    ctx.fillText('python -m memejector_tracker run --source synthetic', W / 2, H * 0.30 + F(32));
+  }
+}
+
+function fmtPinch(h) {
+  if (!h) return '--';
+  return `${h.pinch.closed ? 'CLOSED' : 'open  '} ${h.pinch.value.toFixed(2)}`;
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
